@@ -39,7 +39,9 @@
 		"ai",
 		"llama"
 	],
-	"activationEvents": [],
+	"activationEvents": [
+		"onStartupFinished"
+	],
 	"main": "./dist/extension.js",
 	"contributes": {
 		"viewsContainers": {
@@ -94,6 +96,16 @@
 			{
 				"command": "cline.openInNewTab",
 				"title": "Open In New Tab",
+				"category": "Cline"
+			},
+			{
+				"command": "cline.startNewTask",
+				"title": "Start New Task with Description",
+				"category": "Cline"
+			},
+			{
+				"command": "cline.continueExistingTask",
+				"title": "Continue Existing Task with Message",
 				"category": "Cline"
 			},
 			{
@@ -239,6 +251,16 @@
 					"default": false,
 					"description": "Disables extension from spawning browser session."
 				},
+				"cline.apiServer.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enables the Cline API server for remote control via HTTP. Used in multi-instance setups."
+				},
+				"cline.apiServer.port": {
+					"type": "number",
+					"default": 3001,
+					"description": "Port number for the Cline API server. Must be between 1024 and 65535."
+				},
 				"cline.modelSettings.o3Mini.reasoningEffort": {
 					"type": "string",
 					"enum": [
@@ -326,6 +348,7 @@
 		"@types/chai": "^5.0.1",
 		"@types/clone-deep": "^4.0.4",
 		"@types/diff": "^5.2.1",
+		"@types/express": "^5.0.1",
 		"@types/get-folder-size": "^3.0.4",
 		"@types/mocha": "^10.0.7",
 		"@types/node": "20.x",
