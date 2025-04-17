@@ -131,7 +131,7 @@ export class Controller {
 		await updateGlobalState(this.context, "userInfo", info)
 	}
 
-	async initTask(task?: string, images?: string[], historyItem?: HistoryItem) {
+	async initTask(task?: string, images?: string[], historyItem?: HistoryItem): Promise<string> {
 		await this.clearTask() // ensures that an existing task doesn't exist before starting a new one, although this shouldn't be possible since user must clear task before starting a new one
 		const { apiConfiguration, customInstructions, autoApprovalSettings, browserSettings, chatSettings } =
 			await getAllExtensionState(this.context)
@@ -153,6 +153,9 @@ export class Controller {
 			images,
 			historyItem,
 		)
+
+		// Return the task ID
+		return this.task.taskId
 	}
 
 	async reinitExistingTaskFromId(taskId: string) {

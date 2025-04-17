@@ -11,6 +11,7 @@ import { telemetryService } from "./services/telemetry/TelemetryService"
 import { WebviewProvider } from "./core/webview"
 import { createTestServer, shutdownTestServer } from "./services/test/TestServer"
 import { ErrorService } from "./services/error/ErrorService"
+import { startApiServer, stopApiServer } from "./services/api/ApiServer"
 
 /*
 Built using https://github.com/microsoft/vscode-webview-ui-toolkit
@@ -43,6 +44,22 @@ export function activate(context: vscode.ExtensionContext) {
 			webviewOptions: { retainContextWhenHidden: true },
 		}),
 	)
+
+	// Start the API server immediately when the extension is activated
+	const config = vscode.workspace.getConfiguration("cline")
+	const apiServerEnabled = config.get("apiServer.enabled", true)
+	const apiServerPort = config.get("apiServer.port", 3001)
+
+	if (apiServerEnabled) {
+		startApiServer(apiServerPort)
+			.then(() => {
+				Logger.log(`Cline API server started on port ${apiServerPort}`)
+			})
+			.catch((error) => {
+				Logger.log(`Failed to start Cline API server: ${error}`)
+				vscode.window.showErrorMessage(`Failed to start Cline API server: ${error}`)
+			})
+	}
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand("cline.plusButtonClicked", async (webview: any) => {
@@ -415,6 +432,86 @@ export function activate(context: vscode.ExtensionContext) {
 		}),
 	)
 
+	// Add command to start a new task (used by API Server)
+	context.subscriptions.push(
+		vscode.commands.registerCommand("cline.startNewTask", async (params: { task: string; images?: string[] }) => {
+			try {
+				Logger.log(`Starting new task: ${params.task.substring(0, 50)}${params.task.length > 50 ? "..." : ""}`)
+
+				// Find a visible webview instance
+				const visibleWebview = WebviewProvider.getVisibleInstance()
+				if (!visibleWebview) {
+					throw new Error("No visible webview instance found")
+				}
+
+				// Clear any existing task first
+				await visibleWebview.controller.handleWebviewMessage({
+					type: "clearTask",
+				})
+
+				// Start the new task
+				await visibleWebview.controller.handleWebviewMessage({
+					type: "newTask",
+					text: params.task,
+					images: params.images || [],
+				})
+
+				// Wait a moment for the task ID to be available, then retrieve it
+				await setTimeoutPromise(500)
+
+				// Get the current task ID from the state
+				const state = await visibleWebview.controller.getStateToPostToWebview()
+				const taskId = state.currentTaskItem?.id
+
+				if (!taskId) {
+					throw new Error("Failed to get task ID after task creation")
+				}
+
+				return taskId
+			} catch (error) {
+				Logger.log(`Error starting new task: ${error}`)
+				throw error
+			}
+		}),
+	)
+
+	// Add message to an existing task (used by API Server)
+	context.subscriptions.push(
+		vscode.commands.registerCommand(
+			"cline.addMessageToTask",
+			async (params: { taskId: string; message: string; images?: string[] }) => {
+				try {
+					Logger.log(`Adding message to task: ${params.taskId}`)
+
+					// Find a visible webview instance
+					const visibleWebview = WebviewProvider.getVisibleInstance()
+					if (!visibleWebview) {
+						throw new Error("No visible webview instance found")
+					}
+
+					// First, load the task using the showTaskWithId method which is part of the public API
+					await visibleWebview.controller.showTaskWithId(params.taskId)
+
+					// Wait a moment for the task to be fully loaded
+					await setTimeoutPromise(500)
+
+					// Send a message to the webview with the user's input - this simulates the user entering a message
+					await visibleWebview.controller.handleWebviewMessage({
+						type: "askResponse",
+						askResponse: "messageResponse",
+						text: params.message,
+						images: params.images || [],
+					})
+
+					return { success: true, taskId: params.taskId }
+				} catch (error) {
+					Logger.log(`Error adding message to task: ${error}`)
+					throw error
+				}
+			},
+		),
+	)
+
 	// Set up test server if in test mode
 	if (IS_TEST === "true") {
 		createTestServer(sidebarWebview)
@@ -435,6 +532,11 @@ const { IS_DEV, DEV_WORKSPACE_FOLDER, IS_TEST } = process.env
 export function deactivate() {
 	// Shutdown the test server if it exists
 	shutdownTestServer()
+
+	// Shutdown the API server if it exists
+	stopApiServer()
+		.then(() => Logger.log("Cline API server stopped"))
+		.catch((error) => Logger.log(`Error stopping Cline API server: ${error}`))
 
 	telemetryService.shutdown()
 	Logger.log("Cline extension deactivated")
